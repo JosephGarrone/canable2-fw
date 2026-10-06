@@ -18,6 +18,8 @@ static uint32_t prescaler;
 static uint32_t data_prescaler;
 enum can_bus_state bus_state;
 static uint8_t can_autoretransmit = ENABLE;
+// Mode chosen by the M command, applied by can_enable(). Normal until M1.
+static uint32_t can_mode = FDCAN_MODE_NORMAL;
 static can_txbuf_t txqueue = {0};
 
 
@@ -89,7 +91,7 @@ void can_enable(void)
 
 
     	//can_handle.Init.Prescaler = prescaler;
-    	can_handle.Init.Mode = FDCAN_MODE_NORMAL;
+    	can_handle.Init.Mode = can_mode;
     	can_handle.Init.AutoRetransmission = can_autoretransmit;
         can_handle.Init.TransmitPause = DISABLE; // emz
         can_handle.Init.ProtocolException = DISABLE; // emz
@@ -228,9 +230,9 @@ void can_set_silent(uint8_t silent)
     }
     if (silent)
     {
-    	can_handle.Init.Mode = FDCAN_MODE_BUS_MONITORING; // !!!?!?!
+    	can_mode = FDCAN_MODE_BUS_MONITORING;
     } else {
-    	can_handle.Init.Mode = FDCAN_MODE_NORMAL;
+    	can_mode = FDCAN_MODE_NORMAL;
     }
 
     led_green_on();
@@ -260,6 +262,14 @@ void can_set_autoretransmit(uint8_t autoretransmit)
 // Send a message on the CAN bus. Called from USB ISR.
 uint32_t can_tx(FDCAN_TxHeaderTypeDef *tx_msg_header, uint8_t* tx_msg_data)
 {
+	// Refuse frames in silent mode, so none waits in the queue to go out
+	// after a later M0 and O
+	if (can_mode != FDCAN_MODE_NORMAL)
+	{
+		error_assert(ERR_CAN_TXFAIL);
+		return HAL_ERROR;
+	}
+
 	// If when we increment the head we're going to hit the tail
 	// (if we're filling the last spot in the queue)
 	if( ((txqueue.head + 1) % TXQUEUE_LEN) == txqueue.tail)
