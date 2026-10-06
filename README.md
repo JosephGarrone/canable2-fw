@@ -1,5 +1,7 @@
 # CANable 2.0 Firmware (listen-only and quiet-LED fork)
 
+[![Build](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml/badge.svg)](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml)
+
 This is a fork of [normaldotcom/canable2-fw](https://github.com/normaldotcom/canable2-fw), the slcan
 firmware for the CANable 2.0. It implements non-standard slcan commands to support CANFD messaging
 alongside a LAWICEL-style command set. Prebuilt binaries are on the
@@ -76,44 +78,97 @@ This firmware currently does not provide any ACK/NACK feedback for serial comman
 
 ## Building
 
-You need GCC for Arm (`arm-none-eabi`), `make` and `git`. The releases are built with the
-[Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) 14.3.Rel1 on
-Linux; your distribution's `gcc-arm-none-eabi` package works too. Add its `bin` folder to your
-`PATH` and run `make`. The firmware lands in `build/canable2-<version>.bin`, where the version is
-`git describe`, so build from a git checkout.
+You do not need to build it to flash it: every push is built by
+[GitHub Actions](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml), and
+every tag becomes a [release](https://github.com/JosephGarrone/canable2-fw/releases) with the
+binaries attached.
 
-`make LEDS_QUIET=1` builds firmware that starts with the status LEDs off, as if `I0` had been sent
-at power-up, so they stay dark before the host connects too.
+To build it yourself you need GCC for Arm (`arm-none-eabi`), `make` and `git`. The releases are
+built with the [Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
+14.3.Rel1 on Linux; your distribution's `gcc-arm-none-eabi` package works too. Add its `bin` folder
+to your `PATH` and run `make`. The firmware lands in `build/canable2-<version>.bin`, where the
+version is `git describe`, so build from a git checkout. `make LEDS_QUIET=1` builds the quiet variant.
 
 ## Flashing
 
-The STM32's built-in USB bootloader takes the firmware; no programmer is needed. Flash one adapter
-at a time.
+The CANable 2.0's STM32 has a USB bootloader built in, so all you need is a USB cable and
+[dfu-util](https://dfu-util.sourceforge.net/). Nothing is lost if it goes wrong: the bootloader is
+in ROM and cannot be overwritten, so you can always flash again.
 
-1. **Enter the bootloader.** Unplug the adapter. On the MKS CANable v2.0, fit a jumper across the two
-   pins marked BOOT; on the Openlight CANable 2.0, hold the BOOT button. Plug it in. It appears as
-   USB device `0483:df11` (STM32 BOOTLOADER) with no serial port.
-2. **Flash it** with [dfu-util](https://dfu-util.sourceforge.net/) 0.9 or later:
-   ```
-   dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D canable2-v1.0-listenonly.bin
-   ```
-   On Linux run it with `sudo`, or `sudo apt install dfu-util` first. With several adapters in the
-   bootloader at once, add `-p <usb path>` or `-S <serial>`; `dfu-util -l` lists them. It ends with
-   `Download done.`; an `Error during download get_status` after that is normal once `:leave` has
-   started the new firmware. On Windows, install the WinUSB driver for STM32 BOOTLOADER with
-   [Zadig](https://zadig.akeo.ie/) once first. `make flash` does the same for a local build.
-3. **Remove the jumper** (or release the button) and replug. With the jumper left on, the adapter
-   starts in the bootloader at every power-up.
-4. **Check it.** The USB product string names the firmware (on Linux, in `/dev/serial/by-id/`), or
-   send `V` over the serial port:
-   ```
-   stty -F /dev/ttyACM0 raw -echo
-   timeout 2 cat /dev/ttyACM0 & sleep 0.3; printf 'CV' > /dev/ttyACM0; wait
-   ```
+### 1. Download a build
 
-The [canable.io web updater](https://canable.io/updater/canable2.html) only flashes upstream builds,
-so it cannot install this firmware, but it is the quickest way back to stock. Stock firmware is also
-at `https://canable.io/builds/canable2/slcan/canable2-b158aa7.bin`, flashed as above.
+From the [latest release](https://github.com/JosephGarrone/canable2-fw/releases/latest), take one of:
+
+| File | Status LEDs at power-up |
+|---|---|
+| `canable2-<version>.bin` | On, as upstream (blue and green show power, bus activity and errors) |
+| `canable2-<version>-quiet.bin` | Off (send `I1` to turn them on) |
+
+Both are the same firmware otherwise. `SHA256SUMS` beside them lets you check the download. A build
+of any commit that is not released yet is on that commit's
+[Actions run](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml), under
+Artifacts (you need to be signed in to GitHub to download it).
+
+### 2. Install dfu-util
+
+- **Linux / Raspberry Pi:** `sudo apt install dfu-util`
+- **macOS:** `brew install dfu-util`
+- **Windows:** download the latest `dfu-util-*-binaries` from the
+  [releases page](https://dfu-util.sourceforge.net/releases/) and unzip it. Windows also needs the
+  WinUSB driver for the bootloader, once: after step 3, run [Zadig](https://zadig.akeo.ie/),
+  choose Options → List All Devices, pick **STM32 BOOTLOADER**, select **WinUSB** and click
+  Install Driver.
+
+### 3. Put the CANable into its bootloader
+
+Unplug the CANable's USB. Then:
+
+- **MKS / Makerbase CANable v2.0:** fit a jumper across the two pins marked **BOOT**.
+- **Openlight Labs CANable 2.0:** hold down the **BOOT** button.
+
+Plug the USB back in (and let go of the button). It now appears as `STM32 BOOTLOADER`, USB id
+`0483:df11`, with no serial port: `lsusb` on Linux, Device Manager on Windows. The CAN wires can stay
+connected; nothing is sent on them.
+
+### 4. Flash it
+
+From the folder holding the `.bin` (on Windows, the dfu-util folder, as `dfu-util.exe`):
+
+```
+dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D canable2-<version>.bin
+```
+
+On Linux, run it with `sudo`. It erases, then writes, then ends with `Download done.` and
+`File downloaded successfully`. An `Error during download get_status` after that is normal: it
+means the CANable has already left the bootloader and started the new firmware.
+
+With more than one CANable in the bootloader at once, `dfu-util -l` lists them; add
+`-p <path>` or `-S <serial>` from that list to pick one.
+
+### 5. Back to normal
+
+**Take the jumper off** (MKS), then unplug and replug the USB. With the jumper left on, the CANable
+starts in the bootloader at every power-up and no serial port appears.
+
+### 6. Check it
+
+The USB product string names the firmware: `CANable2 <version> github.com/JosephGarrone/canable2-fw.git`.
+On Linux, `ls /dev/serial/by-id/` shows it. Or ask the CANable itself over its serial port with
+`V`:
+
+```
+stty -F /dev/ttyACM0 raw -echo
+timeout 2 cat /dev/ttyACM0 & sleep 0.3; printf 'CV' > /dev/ttyACM0; wait
+```
+
+On Windows, any serial terminal on its COM port works: type `V` and Enter.
+
+### Going back to stock
+
+Flash upstream's build the same way:
+`https://canable.io/builds/canable2/slcan/canable2-b158aa7.bin`. The
+[canable.io web updater](https://canable.io/updater/canable2.html) (Chrome) also does it in a few
+clicks, but it only offers upstream builds, so it cannot install this one.
 
 ## License
 
