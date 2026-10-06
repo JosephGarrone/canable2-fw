@@ -98,6 +98,10 @@ CFLAGS += $(USER_CFLAGS)
 CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 CFLAGS += -DGIT_REMOTE=\"$(GIT_REMOTE)\"
 
+# LEDS_QUIET=1 starts with the status LEDs off, as if I0 had been sent
+LEDS_QUIET ?= 0
+CFLAGS += -DLEDS_QUIET_DEFAULT=$(LEDS_QUIET)
+
 # default action: build the user application
 all: $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/$(TARGET).hex
 

@@ -9,6 +9,7 @@
 #include "slcan.h"
 #include "usbd_cdc_if.h"
 #include "printf.h"
+#include "led.h"
 
 
 // Private variables
@@ -222,6 +223,13 @@ int32_t slcan_parse_str(uint8_t *buf, uint8_t len)
 	            // Mode 0: autoretry disabled
 	            can_set_autoretransmit(DISABLE);
 	        }
+	        return 0;
+
+
+	    // FIXME: Nonstandard!
+		case 'I':
+	        // Status LEDs: I0 off, I1 normal (default)
+	        led_set_quiet(buf[1] == 0);
 	        return 0;
 
 
