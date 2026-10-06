@@ -16,8 +16,10 @@ static uint8_t error_blink_status = 0;
 static uint8_t error_was_indicating = 0;
 static uint32_t last_errflash = 0;
 
-// Status LEDs off (I0). Both LEDs are lit by writing 1 and dark at 0, so a
-// quiet LED is held at 0 whatever the code below asks for. LEDS_QUIET_DEFAULT
+// Status LEDs off (I0). Boards wire the LEDs either way round (the Openlight
+// CANable lights them at 1, the MKS CANable v2.0 at 0), so a quiet LED's pin is
+// not driven at all: it is switched to analog mode with no pull, which leaves
+// no current path whichever way the LED is wired. LEDS_QUIET_DEFAULT
 // (make LEDS_QUIET=1) sets it at power-up.
 #ifndef LEDS_QUIET_DEFAULT
 #define LEDS_QUIET_DEFAULT 0
@@ -25,10 +27,28 @@ static uint32_t last_errflash = 0;
 static uint8_t led_quiet = LEDS_QUIET_DEFAULT;
 
 
-// Write an LED pin, or hold it dark while the LEDs are quiet
+// Write an LED pin, unless the LEDs are quiet
 static void led_write(GPIO_TypeDef *port, uint16_t pin, uint8_t value)
 {
-    HAL_GPIO_WritePin(port, pin, led_quiet ? 0 : value);
+    if (!led_quiet)
+        HAL_GPIO_WritePin(port, pin, value);
+}
+
+
+// Configure both LED pins: driven outputs, or undriven while quiet
+static void led_configure_pins(void)
+{
+    GPIO_InitTypeDef GPIO_InitStruct;
+    GPIO_InitStruct.Mode = led_quiet ? GPIO_MODE_ANALOG : GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = led_quiet ? GPIO_NOPULL : GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = 0;
+
+    GPIO_InitStruct.Pin = LED_BLUE_Pin;
+    HAL_GPIO_Init(LED_BLUE_Port, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = LED_GREEN_Pin;
+    HAL_GPIO_Init(LED_GREEN_Port, &GPIO_InitStruct);
 }
 
 
@@ -36,6 +56,7 @@ static void led_write(GPIO_TypeDef *port, uint16_t pin, uint8_t value)
 void led_set_quiet(uint8_t quiet)
 {
     led_quiet = quiet;
+    led_configure_pins();
 
     // Normal operation shows green as the power light and blue dark
     led_write(LED_GREEN, 1);
@@ -49,23 +70,8 @@ void led_init()
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    GPIO_InitTypeDef GPIO_InitStruct;
-    GPIO_InitStruct.Pin = LED_BLUE_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = 0;
-    HAL_GPIO_Init(LED_BLUE_Port, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = LED_GREEN_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = 0;
-    HAL_GPIO_Init(LED_GREEN_Port, &GPIO_InitStruct);
-
-
-    led_write(LED_GREEN, 1); 
+    led_configure_pins();
+    led_write(LED_GREEN, 1);
 }
 
 

@@ -19,7 +19,9 @@ Based on upstream `b158aa7`, the build canable.io ships.
   transmit, acknowledge or send error flags. Frames sent while `M1` is selected are refused, so none
   waits to go out after a later `M0` and `O`.
 - **`I0` turns the status LEDs off; `I1` turns them back on.** Nothing lights the blue or green LED
-  while they are off: not activity, not errors, not the power-on blink. For an adapter inside an
+  while they are off: not activity, not errors, not the power-on blink. Their pins are left
+  undriven rather than driven low, because boards wire the LEDs either way round (the MKS CANable
+  v2.0 lights them when the pin is low). For an adapter inside an
   enclosure, where the flashes show through. A power LED wired straight to the supply on some boards
   is not under firmware control and stays lit.
 - **It builds with GCC 14**, which rejects upstream's undeclared `snprintf_`.
