@@ -10,6 +10,7 @@
 #include "usbd_cdc_if.h"
 #include "printf.h"
 #include "led.h"
+#include "system.h"
 
 
 // Private variables
@@ -133,6 +134,19 @@ int32_t slcan_parse_str(uint8_t *buf, uint8_t len)
         .MessageMarker = 0, // ?
 	};
     uint8_t frame_data[64] = {0};
+
+    // FIXME: Nonstandard!
+    // XDFU: restart into the ROM USB DFU bootloader for a firmware update.
+    // The whole word is required so a stray X cannot do it, and the channel
+    // must be closed so no frame is cut off on the bus.
+    if(buf[0] == 'X')
+    {
+        if(len != 4 || buf[1] != 'D' || buf[2] != 'F' || buf[3] != 'U')
+            return -1;
+        if(can_get_bus_state() == ON_BUS)
+            return -1;
+        system_enter_bootloader();
+    }
 
 
     // Convert from ASCII (2nd character to end)
@@ -295,10 +309,9 @@ int32_t slcan_parse_str(uint8_t *buf, uint8_t len)
 			// Transmit CANFD frame
 			break;
 
+		// Handled above, before the ASCII conversion
 		case 'X':
-			// TODO: Firmware update
-			#warning "TODO: Implement firmware update via command"
-			break;
+			return -1;
 
 		// Invalid command
 		default:

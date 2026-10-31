@@ -64,6 +64,7 @@ uint32_t can_rx(FDCAN_RxHeaderTypeDef *rx_msg_header, uint8_t *rx_msg_data);
 void can_process(void);
 uint8_t is_can_msg_pending(uint8_t fifo);
 FDCAN_HandleTypeDef* can_gethandle(void);
+enum can_bus_state can_get_bus_state(void);
 
 
 #endif // _CAN_H

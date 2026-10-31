@@ -85,6 +85,66 @@ void system_init(void)
 }
 
 
+// Restarting into the STM32's ROM USB DFU bootloader, for firmware updates
+// without the BOOT jumper. The jump is made from here rather than across a
+// reset, so nothing is left behind to bring the bootloader back later: every
+// peripheral this firmware started is returned to its reset state first.
+#define SYSTEM_MEMORY_BASE 0x1FFF0000UL
+
+
+// Jump to the bootloader. Called with interrupts disabled; does not return.
+void system_enter_bootloader(void)
+{
+    // Detach from USB for a while first, so the host drops the CDC port
+    // before the bootloader's DFU device appears
+    USB->BCDR &= ~USB_BCDR_DPPU;
+    for(volatile uint32_t i = 0; i < 2000000UL; i++);
+
+    // Return USB, FDCAN and the pins to their reset state, then the clocks.
+    // With the pins reset the transceiver's standby line floats to its
+    // pull-up, so it is off the bus while the bootloader runs, as it is
+    // when the bootloader is entered with the BOOT jumper.
+    __HAL_RCC_USB_FORCE_RESET();
+    __HAL_RCC_USB_RELEASE_RESET();
+    __HAL_RCC_FDCAN_FORCE_RESET();
+    __HAL_RCC_FDCAN_RELEASE_RESET();
+    __HAL_RCC_GPIOA_FORCE_RESET();
+    __HAL_RCC_GPIOB_FORCE_RESET();
+    __HAL_RCC_GPIOC_FORCE_RESET();
+    __HAL_RCC_GPIOA_RELEASE_RESET();
+    __HAL_RCC_GPIOB_RELEASE_RESET();
+    __HAL_RCC_GPIOC_RELEASE_RESET();
+    HAL_RCC_DeInit();
+
+    // HAL_RCC_DeInit restarts SysTick; stop it and every interrupt
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+    for(uint32_t i = 0; i < sizeof(NVIC->ICER) / sizeof(NVIC->ICER[0]); i++)
+    {
+        NVIC->ICER[i] = 0xFFFFFFFFUL;
+        NVIC->ICPR[i] = 0xFFFFFFFFUL;
+    }
+    SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
+
+    // Map system memory at address 0 and start the bootloader from its own
+    // vector table, with interrupts enabled as after a reset
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+    SYSCFG->MEMRMP = SYSCFG_MEMRMP_MEM_MODE_0;
+
+    uint32_t stack = *(volatile uint32_t *)SYSTEM_MEMORY_BASE;
+    uint32_t entry = *(volatile uint32_t *)(SYSTEM_MEMORY_BASE + 4);
+    SCB->VTOR = SYSTEM_MEMORY_BASE;
+    __DSB();
+    __ISB();
+    __enable_irq();
+
+    // One block, so nothing uses the old stack once the new one is set
+    __asm volatile("msr msp, %0\n\tbx %1" : : "r"(stack), "r"(entry) : "memory");
+    __builtin_unreachable();
+}
+
+
 // Disable all interrupts
 void system_irq_disable(void)
 {

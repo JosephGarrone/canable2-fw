@@ -352,3 +352,10 @@ FDCAN_HandleTypeDef* can_gethandle(void)
 {
 	return &can_handle;
 }
+
+
+// Whether the channel is open
+enum can_bus_state can_get_bus_state(void)
+{
+    return bus_state;
+}
