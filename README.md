@@ -1,4 +1,4 @@
-# CANable 2.0 Firmware (listen-only and quiet-LED fork)
+# CANable 2.0 Firmware (listen-only, quiet-LED and jumper-free update fork)
 
 [![Build](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml/badge.svg)](https://github.com/JosephGarrone/canable2-fw/actions/workflows/build.yml)
 
@@ -24,9 +24,14 @@ Based on upstream `b158aa7`, the build canable.io ships.
   v2.0 lights them when the pin is low). For an adapter inside an
   enclosure, where the flashes show through. A power LED wired straight to the supply on some boards
   is not under firmware control and stays lit.
+- **`XDFU` restarts it into its USB bootloader**, so it can be flashed without the BOOT jumper or
+  button. The channel must be closed first (`C`); while it is open `XDFU` is refused, so no frame is
+  cut off on the bus. The CANable drops off USB, its CAN transceiver goes to standby, and about half
+  a second later it appears as `STM32 BOOTLOADER`. Upstream has an unfinished `X` command that falls
+  through to the frame parser and can transmit a frame; here a bare `X` does nothing.
 - **It builds with GCC 14**, which rejects upstream's undeclared `snprintf_`.
 
-The `V` reply names the release, for example `v1.0-listenonly github.com/JosephGarrone/canable2-fw.git`,
+The `V` reply names the release, for example `v1.2-listenonly github.com/JosephGarrone/canable2-fw.git`,
 so this firmware can be told from upstream's (`b158aa7 github.com/normaldotcom/canable2.git`).
 
 ## Supported Commands
@@ -60,6 +65,8 @@ so this firmware can be told from upstream's (`b158aa7 github.com/normaldotcom/c
 
 - `I0` - Turn the status LEDs off
 - `I1` - Turn the status LEDs on (default)
+
+- `XDFU` - Restart into the USB bootloader for a firmware update (channel closed only)
 
 - `V` - Returns firmware version and remote path as a string
 - `E` - Returns error register
@@ -123,7 +130,11 @@ Artifacts (you need to be signed in to GitHub to download it).
 
 ### 3. Put the CANable into its bootloader
 
-Unplug the CANable's USB. Then:
+If it already runs this fork (v1.2 or later), send it `C` and then `XDFU` over its serial port, the
+same way as the `V` in step 6 (`printf 'C\rXDFU\r' > /dev/ttyACM0` on Linux), and go to step 4.
+No jumper, no unplugging.
+
+Otherwise, unplug the CANable's USB. Then:
 
 - **MKS / Makerbase CANable v2.0:** fit a jumper across the two pins marked **BOOT**.
 - **Openlight Labs CANable 2.0:** hold down the **BOOT** button.
@@ -149,8 +160,10 @@ With more than one CANable in the bootloader at once, `dfu-util -l` lists them; 
 
 ### 5. Back to normal
 
-**Take the jumper off** (MKS), then unplug and replug the USB. With the jumper left on, the CANable
-starts in the bootloader at every power-up and no serial port appears.
+If you used `XDFU`, there is nothing to do: the `leave` in step 4 starts the new firmware.
+
+Otherwise **take the jumper off** (MKS), then unplug and replug the USB. With the jumper left on,
+the CANable starts in the bootloader at every power-up and no serial port appears.
 
 ### 6. Check it
 
@@ -160,7 +173,7 @@ On Linux, `ls /dev/serial/by-id/` shows it. Or ask the CANable itself over its s
 
 ```
 stty -F /dev/ttyACM0 raw -echo
-timeout 2 cat /dev/ttyACM0 & sleep 0.3; printf 'CV' > /dev/ttyACM0; wait
+timeout 2 cat /dev/ttyACM0 & sleep 0.3; printf 'C\rV\r' > /dev/ttyACM0; wait
 ```
 
 On Windows, any serial terminal on its COM port works: type `V` and Enter.
